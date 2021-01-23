@@ -2,22 +2,7 @@
 
 from py3cw.request import Py3CW
 import click
-
-"""
-Generate an API key for 3commas with using the link below 
-Give the key "Bots read" permission and copy the generated key and secret in to the variables below
-https://3commas.io/api_access_tokens
-
-Next, set the fee for your exchange. I, personalaly, use the taker fee here. This may result in more 
-fees being calculated than were actually incurrred but I would rather be conservative. You can set this 
-to anything you want for your preferences.Unfortunately this is the best I can do right now until I find
-a way to figure out what type of order was used for specific deals.
-"""
-### API KEY INFO (PUT YOURS HERE)
-KEY = "XXXXXXXXXX"
-SECRET = "XXXXXXXX"
-### SET THIS TO YOUR FEE PERCENTAGE
-FEE = ".5"
+import configparser
 
 """
 Usage Examples:
@@ -32,8 +17,7 @@ Example: When viewing my bot, my URL is "https://3commas.io/bots/1234567", my bo
 """
 
 
-def get_prices(deal):
-    fee = float(FEE) / 100
+def get_prices(deal, fee: float):
     try:
         sold = float(deal.get("sold_volume"))
     except TypeError:
@@ -53,15 +37,30 @@ def get_prices(deal):
 
 
 @click.command()
-@click.option("-b", "--bot", required=False, default=None, help="Target Bot ID")
-def main(bot):
+@click.option(
+    "-b",
+    "--bot",
+    required=False,
+    default=None,
+    help="Target Bot ID",
+)
+@click.option(
+    "-c",
+    "--config",
+    required=False,
+    default="config.ini",
+    help="Alternate config file. Default: config.ini",
+)
+def main(bot, config):
     """
     Calculate total P/L and Fees from DCA bot trades.
     Will calculate all deals unless bot ID specified with optional argument
     """
+    cfg = configparser.ConfigParser()
+    cfg.read(config)
     p3cw = Py3CW(
-        key=KEY,
-        secret=SECRET,
+        key=cfg["GLOBAL"]["api_key"],
+        secret=cfg["GLOBAL"]["api_secret"],
         request_options={
             "request_timeout": 10,
             "nr_of_retries": 1,
@@ -81,28 +80,32 @@ def main(bot):
             action="",
         )
     if error != {}:
-        print(error)
+        click.secho(error, fg="red", bold=True)
         exit(1)
 
     total_pl = float(0)
     total_fees = float(0)
+    fee = float(cfg["GLOBAL"]["exchange_fee"]) / 100
+
     for deal in deals:
-        pl, fee = get_prices(deal)
+        if not deal.get("finished?"):
+            continue
+        pl, fees = get_prices(deal, fee)
         if pl is None and fee is None:
             continue
         if deal.get("status") != "failed":
 
-            print("-----")
-            print(f"Deal ID: {deal.get('id')}")
-            print(f"P/L: {pl}")
-            print(f"Fee: {fee}")
+            click.secho("-----", bold=True)
+            click.echo(f"Deal ID: {deal.get('id')}")
+            click.echo(f"P/L: {pl}")
+            click.echo(f"Fee: {fees}")
             total_pl += pl
-            total_fees += fee
-    print()
-    print("Totals")
-    print("-----")
-    print(f"P/L: {total_pl}")
-    print(f"Fees: {total_fees}")
+            total_fees += fees
+    click.echo()
+    click.secho("Totals", bold=True)
+    click.secho("-----", bold=True)
+    click.echo(f"P/L: {total_pl}")
+    click.echo(f"Fees: {total_fees}")
 
 
 if __name__ == "__main__":
