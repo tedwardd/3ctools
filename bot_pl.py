@@ -3,6 +3,7 @@
 from py3cw.request import Py3CW
 import click
 import configparser
+import sys
 
 """
 Usage Examples:
@@ -79,9 +80,10 @@ def main(bot, config):
             entity="deals",
             action="",
         )
-    if error != {}:
-        click.secho(error, fg="red", bold=True)
-        exit(1)
+
+    if error.get("error"):
+        click.secho(error.get("msg"), fg="red", bold=True)
+        sys.exit(1)
 
     total_pl = float(0)
     total_fees = float(0)
@@ -97,15 +99,15 @@ def main(bot, config):
 
             click.secho("-----", bold=True)
             click.echo(f"Deal ID: {deal.get('id')}")
-            click.echo(f"P/L: {pl}")
-            click.echo(f"Fee: {fees}")
+            click.echo(f"P/L: ${round(pl, 2)}")
+            click.echo(f"Fee: ${round(fees, 2)}")
             total_pl += pl
             total_fees += fees
     click.echo()
     click.secho("Totals", bold=True)
     click.secho("-----", bold=True)
-    click.echo(f"P/L: {total_pl}")
-    click.echo(f"Fees: {total_fees}")
+    click.echo(f"P/L: ${round(total_pl, 2)}")
+    click.echo(f"Fees: ${round(total_fees, 2)}")
 
 
 if __name__ == "__main__":
