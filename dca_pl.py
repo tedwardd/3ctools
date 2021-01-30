@@ -41,17 +41,17 @@ class Client:
         )
 
     def deals(self, bot_id):
-        if bot_id is None:
-            error, deals = self.p3cw.request(
-                entity="deals",
-                action="",
-            )
-        else:
-            error, deals = self.p3cw.request(
-                entity="deals",
-                action="show",
-                action_id=bot_id,
-            )
+        error, deals = self.p3cw.request(
+            entity="deals",
+            action="",
+        )
+        if bot_id is not None:
+            filtered_deals = []
+            for deal in deals:
+                if str(deal.get("bot_id")) == bot_id:
+                    filtered_deals.append(deal)
+            deals = filtered_deals
+
         return error, deals
 
     def get_prices(self, deal, fee: float):
@@ -106,7 +106,6 @@ def main(bot, config_file):
     total_pl = float(0)
     total_fees = float(0)
     fee = float(config.exchange_fee) / 100
-
     for deal in deals:
         if not deal.get("finished?"):
             continue
