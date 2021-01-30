@@ -8,10 +8,10 @@ import sys
 """
 Usage Examples:
     To show total for all bots:
-        python bot_pl.py
+        python dca_pl.py
 
     To show totals for specific bot:
-        python bot_pl.py -b 1234567
+        python dca_pl.py -b 1234567
 
 The bot ID (1234567 in the example above) is a seven digit number found in the URL when viewing a bot.
 Example: When viewing my bot, my URL is "https://3commas.io/bots/1234567", my bot ID is "1234567"
