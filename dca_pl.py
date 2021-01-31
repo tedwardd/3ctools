@@ -145,6 +145,8 @@ def main(bot, config_file, quiet, nolog):
         count = int(bot_info.get("finished_deals_count"))
         if count > 1000:
             count = round(count / 1000)
+        else:
+            count = 1
         deals = []
         offset = 0
         while count > 0:
@@ -155,6 +157,7 @@ def main(bot, config_file, quiet, nolog):
             deals += deal_part
             count -= 1
             offset = offset + 1000
+            print(count)
     else:
         error, deals = client.deals(bot, offset)
         if error.get("error"):
