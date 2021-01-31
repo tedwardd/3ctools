@@ -20,22 +20,23 @@ Example: When viewing my bot, my URL is "https://3commas.io/bots/1234567", my bo
 
 
 class Config:
-    def __init__(self, config_file):
+    def __init__(self, config_file, nolog):
         config = configparser.ConfigParser()
         config.read(config_file)
 
         self.api_key = config["GLOBAL"]["api_key"]
         self.api_secret = config["GLOBAL"]["api_secret"]
         self.exchange_fee = config["GLOBAL"]["exchange_fee"]
-        try:
-            elf.outfile = config["GLOBAL"]["outfile"]
-        except KeyError:
-            click.secho(
-                f"No value for 'outfile' configured in {config_file}",
-                fg="red",
-                bold=True,
-            )
-            exit(1)
+        if not nolog:
+            try:
+                self.outfile = config["GLOBAL"]["outfile"]
+            except KeyError:
+                click.secho(
+                    f"No value for 'outfile' configured in {config_file}",
+                    fg="red",
+                    bold=True,
+                )
+                exit(1)
 
 
 class Client:
@@ -50,32 +51,12 @@ class Client:
             },
         )
 
-    def deals(self, bot_id):
+    def deals(self, bot_id, offset):
         payload = {
             "finished?": True,
-            "limit": "1000",
-            "status": [
-                "created,",
-                "base_order_placed",
-                "bought",
-                "cancelled",
-                "completed",
-                "panic_sell_pending",
-                "panic_sell_order_placed",
-                "panic_sold",
-                "cancel_pending",
-                "stop_loss_pending",
-                "stop_loss_finished",
-                "stop_loss_order_placed",
-                "switched",
-                "switched_take_profit",
-                "ttp_activated",
-                "ttp_order_placed",
-                "liquidated",
-                "bought_safety_pending",
-                "bought_take_profit_pending",
-                "settled",
-            ],
+            "limit": 1000,
+            "offset": offset,
+            "scope": "finished",
         }
 
         if bot_id is not None:
@@ -84,6 +65,7 @@ class Client:
                     "bot_id": bot_id,
                 }
             )
+
         error, deals = self.p3cw.request(
             entity="deals",
             action="",
@@ -91,6 +73,15 @@ class Client:
         )
 
         return error, deals
+
+    def bots(self, bot_id):
+        error, bot_info = self.p3cw.request(
+            entity="bots",
+            action="show",
+            action_id=bot_id,
+        )
+
+        return error, bot_info
 
     def get_prices(self, deal, fee: float):
         # TODO: Use API provided fee information once it's available
@@ -128,47 +119,81 @@ class Client:
     default="config.ini",
     help="Alternate config file. Default: config.ini",
 )
-def main(bot, config_file):
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Quiet: supress output to screen",
+)
+@click.option(
+    "--nolog",
+    is_flag=True,
+    help="Do not write to output file",
+)
+def main(bot, config_file, quiet, nolog):
     """
     Calculate total P/L and Fees from DCA bot trades.
     Will calculate all deals unless bot ID specified with optional argument
     """
-    config = Config(config_file)
+    config = Config(config_file, nolog)
     client = Client(config)
-
-    error, deals = client.deals(bot)
-    if error.get("error"):
-        click.secho(error.get("msg"), fg="red", bold=True)
-        sys.exit(1)
+    if bot is not None:
+        error, bot_info = client.bots(bot)
+        if error.get("error"):
+            click.secho(error.get("msg"), fg="red", bold=True)
+            sys.exit(1)
+        count = int(bot_info.get("finished_deals_count"))
+        if count > 1000:
+            count = round(count / 1000)
+        deals = []
+        offset = 0
+        while count > 0:
+            error, deal_part = client.deals(bot, offset)
+            if error.get("error"):
+                click.secho(error.get("msg"), fg="red", bold=True)
+                sys.exit(1)
+            deals += deal_part
+            count -= 1
+            offset = offset + 1000
+    else:
+        error, deals = client.deals(bot, offset)
+        if error.get("error"):
+            click.secho(error.get("msg"), fg="red", bold=True)
+            sys.exit(1)
 
     total_pl = float(0)
     total_fees = float(0)
     fee = float(config.exchange_fee) / 100
-    f = Path(config.outfile)
+    if not nolog:
+        f = Path(config.outfile)
     for deal in deals:
-        if deals.index(deal) == 0:
-            values = ",".join(deal.keys()) + "\n"
+        if not nolog:
+            if deals.index(deal) == 0:
+                values = ",".join(deal.keys()) + "\n"
         pl, fees = client.get_prices(deal, fee)
         if pl is None and fee is None:
             continue
-        click.echo(f"Deal ID: {deal.get('id')}")
-        click.secho("-----", bold=True)
-        click.echo(f"P/L: ${round(pl, 2)}")
-        click.echo(f"Fee: ${round(fees, 2)}")
-        click.echo()
+        if not quiet:
+            click.echo(f"Deal ID: {deal.get('id')}")
+            click.secho("-----", bold=True)
+            click.echo(f"P/L: ${round(pl, 2)}")
+            click.echo(f"Fee: ${round(fees, 2)}")
+            click.echo()
         total_pl += pl
         total_fees += fees
         value_list = list(deal.values())
-        for i in value_list:
-            values += str(i) + ","
-        values += "\n"
-    f.open("w").write(values)
-
-    click.secho("Totals", bold=True)
-    click.secho("-----", bold=True)
-    click.echo(f"Deals Completed: {len(deals)}")
-    click.echo(f"P/L: ${round(total_pl, 2)}")
-    click.echo(f"Fees: ${round(total_fees, 2)}")
+        if not nolog:
+            for i in value_list:
+                values += str(i) + ","
+            values += "\n"
+    if not nolog:
+        f.open("w").write(values)
+    if not quiet:
+        click.secho("Totals", bold=True)
+        click.secho("-----", bold=True)
+        click.echo(f"Deals Completed: {len(deals)}")
+        click.echo(f"P/L: ${round(total_pl, 2)}")
+        click.echo(f"Fees: ${round(total_fees, 2)}")
 
 
 if __name__ == "__main__":
