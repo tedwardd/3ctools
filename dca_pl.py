@@ -4,6 +4,7 @@ from py3cw.request import Py3CW
 import click
 import configparser
 import sys
+from pathlib import Path
 
 """
 Usage Examples:
@@ -26,6 +27,15 @@ class Config:
         self.api_key = config["GLOBAL"]["api_key"]
         self.api_secret = config["GLOBAL"]["api_secret"]
         self.exchange_fee = config["GLOBAL"]["exchange_fee"]
+        try:
+            elf.outfile = config["GLOBAL"]["outfile"]
+        except KeyError:
+            click.secho(
+                f"No value for 'outfile' configured in {config_file}",
+                fg="red",
+                bold=True,
+            )
+            exit(1)
 
 
 class Client:
@@ -134,7 +144,10 @@ def main(bot, config_file):
     total_pl = float(0)
     total_fees = float(0)
     fee = float(config.exchange_fee) / 100
+    f = Path(config.outfile)
     for deal in deals:
+        if deals.index(deal) == 0:
+            values = ",".join(deal.keys()) + "\n"
         pl, fees = client.get_prices(deal, fee)
         if pl is None and fee is None:
             continue
@@ -145,6 +158,12 @@ def main(bot, config_file):
         click.echo()
         total_pl += pl
         total_fees += fees
+        value_list = list(deal.values())
+        for i in value_list:
+            values += str(i) + ","
+        values += "\n"
+    f.open("w").write(values)
+
     click.secho("Totals", bold=True)
     click.secho("-----", bold=True)
     click.echo(f"Deals Completed: {len(deals)}")
