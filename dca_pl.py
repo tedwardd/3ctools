@@ -157,9 +157,8 @@ def main(bot, config_file, quiet, nolog):
             deals += deal_part
             count -= 1
             offset = offset + 1000
-            print(count)
     else:
-        error, deals = client.deals(bot, offset)
+        error, deals = client.deals(bot, 0)
         if error.get("error"):
             click.secho(error.get("msg"), fg="red", bold=True)
             sys.exit(1)
