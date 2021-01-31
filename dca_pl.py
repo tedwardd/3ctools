@@ -41,16 +41,44 @@ class Client:
         )
 
     def deals(self, bot_id):
+        payload = {
+            "finished?": True,
+            "limit": "1000",
+            "status": [
+                "created,",
+                "base_order_placed",
+                "bought",
+                "cancelled",
+                "completed",
+                "panic_sell_pending",
+                "panic_sell_order_placed",
+                "panic_sold",
+                "cancel_pending",
+                "stop_loss_pending",
+                "stop_loss_finished",
+                "stop_loss_order_placed",
+                "switched",
+                "switched_take_profit",
+                "ttp_activated",
+                "ttp_order_placed",
+                "liquidated",
+                "bought_safety_pending",
+                "bought_take_profit_pending",
+                "settled",
+            ],
+        }
+
+        if bot_id is not None:
+            payload.update(
+                {
+                    "bot_id": bot_id,
+                }
+            )
         error, deals = self.p3cw.request(
             entity="deals",
             action="",
+            payload=payload,
         )
-        if bot_id is not None:
-            filtered_deals = []
-            for deal in deals:
-                if str(deal.get("bot_id")) == bot_id:
-                    filtered_deals.append(deal)
-            deals = filtered_deals
 
         return error, deals
 
@@ -107,22 +135,19 @@ def main(bot, config_file):
     total_fees = float(0)
     fee = float(config.exchange_fee) / 100
     for deal in deals:
-        if not deal.get("finished?"):
-            continue
         pl, fees = client.get_prices(deal, fee)
         if pl is None and fee is None:
             continue
-        if deal.get("status") != "failed":
-
-            click.echo(f"Deal ID: {deal.get('id')}")
-            click.secho("-----", bold=True)
-            click.echo(f"P/L: ${round(pl, 2)}")
-            click.echo(f"Fee: ${round(fees, 2)}")
-            click.echo()
-            total_pl += pl
-            total_fees += fees
+        click.echo(f"Deal ID: {deal.get('id')}")
+        click.secho("-----", bold=True)
+        click.echo(f"P/L: ${round(pl, 2)}")
+        click.echo(f"Fee: ${round(fees, 2)}")
+        click.echo()
+        total_pl += pl
+        total_fees += fees
     click.secho("Totals", bold=True)
     click.secho("-----", bold=True)
+    click.echo(f"Deals Completed: {len(deals)}")
     click.echo(f"P/L: ${round(total_pl, 2)}")
     click.echo(f"Fees: ${round(total_fees, 2)}")
 
