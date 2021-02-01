@@ -58,7 +58,6 @@ class Client:
             "offset": offset,
             "scope": "finished",
         }
-
         if bot_id is not None:
             payload.update(
                 {
@@ -75,12 +74,17 @@ class Client:
         return error, deals
 
     def bots(self, bot_id):
+        if bot_id is not None:
+            error, bot_info = self.p3cw.request(
+                entity="bots",
+                action="show",
+                action_id=bot_id,
+            )
+            return error, bot_info
         error, bot_info = self.p3cw.request(
             entity="bots",
-            action="show",
-            action_id=bot_id,
+            action="",
         )
-
         return error, bot_info
 
     def get_prices(self, deal, fee: float):
@@ -130,38 +134,42 @@ class Client:
     is_flag=True,
     help="Do not write to output file",
 )
-def main(bot, config_file, quiet, nolog):
+def main(
+    bot: int,
+    config_file: str,
+    quiet: bool,
+    nolog: bool,
+):
     """
     Calculate total P/L and Fees from DCA bot trades.
     Will calculate all deals unless bot ID specified with optional argument
     """
     config = Config(config_file, nolog)
     client = Client(config)
-    if bot is not None:
-        error, bot_info = client.bots(bot)
-        if error.get("error"):
-            click.secho(error.get("msg"), fg="red", bold=True)
-            sys.exit(1)
-        count = int(bot_info.get("finished_deals_count"))
-        if count > 1000:
-            count = round(count / 1000)
-        else:
-            count = 1
-        deals = []
-        offset = 0
-        while count > 0:
-            error, deal_part = client.deals(bot, offset)
-            if error.get("error"):
-                click.secho(error.get("msg"), fg="red", bold=True)
-                sys.exit(1)
-            deals += deal_part
-            count -= 1
-            offset = offset + 1000
+    error, bot_info = client.bots(bot)
+    if error.get("error"):
+        click.secho(error.get("msg"), fg="red", bold=True)
+        sys.exit(1)
+    if type(bot_info) is list:
+        count = 0
+        for list_bot in bot_info:
+            count += int(list_bot.get("finished_deals_count"))
     else:
-        error, deals = client.deals(bot, 0)
+        count = int(bot_info.get("finished_deals_count"))
+    if count > 1000:
+        count = round(count / 1000)
+    else:
+        count = 1
+    deals = []
+    offset = 0
+    while count > 0:
+        error, deal_part = client.deals(bot, offset)
         if error.get("error"):
             click.secho(error.get("msg"), fg="red", bold=True)
             sys.exit(1)
+        deals += deal_part
+        count -= 1
+        offset = offset + 1000
 
     total_pl = float(0)
     total_fees = float(0)
