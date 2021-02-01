@@ -134,16 +134,38 @@ class Client:
     is_flag=True,
     help="Do not write to output file",
 )
+@click.option(
+    "-s",
+    "--size",
+    default=None,
+    required=False,
+    help="Amount allocated for bot (use with -b)",
+)
+@click.option(
+    "--totals-only",
+    is_flag=True,
+    help="Only print totals to stdout",
+)
 def main(
     bot: int,
     config_file: str,
     quiet: bool,
     nolog: bool,
+    size: int,
+    totals_only: bool,
 ):
     """
     Calculate total P/L and Fees from DCA bot trades.
     Will calculate all deals unless bot ID specified with optional argument
     """
+    if size is not None and bot is None:
+        click.secho(
+            "You can not provide a dollar allocation without also providing a bot (see --help)",
+            fg="red",
+            bold=True,
+        )
+        sys.exit(1)
+
     config = Config(config_file, nolog)
     client = Client(config)
     error, bot_info = client.bots(bot)
@@ -183,7 +205,7 @@ def main(
         pl, fees = client.get_prices(deal, fee)
         if pl is None and fee is None:
             continue
-        if not quiet:
+        if not quiet and not totals_only:
             click.echo(f"Deal ID: {deal.get('id')}")
             click.secho("-----", bold=True)
             click.echo(f"P/L: ${round(pl, 2)}")
@@ -203,7 +225,8 @@ def main(
         click.secho("-----", bold=True)
         click.echo(f"Deals Completed: {len(deals)}")
         click.echo(f"P/L: ${round(total_pl, 2)}")
-        click.echo(f"Fees: ${round(total_fees, 2)}")
+        if size is not None:
+            click.echo(f"P/L %: {round((total_pl/float(size))*100, 2)}%")
 
 
 if __name__ == "__main__":
