@@ -18,6 +18,9 @@ The bot ID (1234567 in the example above) is a seven digit number found in the U
 Example: When viewing my bot, my URL is "https://3commas.io/bots/1234567", my bot ID is "1234567"
 """
 
+MAX_RESP = 1000  # Max response size for 3commas API
+OMIT_STATUS = ["cancelled", "failed"]  # Default statuses to omit if not in config.ini
+
 
 class Config:
     def __init__(self, config_file, nolog):
@@ -26,7 +29,11 @@ class Config:
 
         self.api_key = config["GLOBAL"]["api_key"]
         self.api_secret = config["GLOBAL"]["api_secret"]
-        self.exchange_fee = config["GLOBAL"]["exchange_fee"]
+        try:
+            self.omit_statuses = config["GLOBAL"]["omit_statuses"]
+        except KeyError:
+            self.omit_statuses = OMIT_STATUS
+
         if not nolog:
             try:
                 self.outfile = config["GLOBAL"]["outfile"]
@@ -53,9 +60,8 @@ class Client:
 
     def deals(self, bot_id, offset):
         payload = {
-            "finished?": True,
-            "limit": 1000,
-            "offset": offset,
+            "limit": MAX_RESP,
+            "offset": int(offset),
             "scope": "finished",
         }
         if bot_id is not None:
@@ -64,7 +70,6 @@ class Client:
                     "bot_id": bot_id,
                 }
             )
-
         error, deals = self.p3cw.request(
             entity="deals",
             action="",
@@ -87,8 +92,7 @@ class Client:
         )
         return error, bot_info
 
-    def get_prices(self, deal, fee: float):
-        # TODO: Use API provided fee information once it's available
+    def get_prices(self, deal):
         try:
             sold = float(deal.get("sold_volume"))
         except TypeError:
@@ -98,13 +102,9 @@ class Client:
         except TypeError:
             bought = float(0)
 
-        sell_fee = sold * fee
-        buy_fee = bought * fee
-        fees = sell_fee + buy_fee
+        real_pl = sold - bought
 
-        real_pl = (sold - (sold * fee)) - (bought - (bought * fee))
-
-        return real_pl, fees
+        return real_pl
 
 
 @click.command()
@@ -155,16 +155,9 @@ def main(
     totals_only: bool,
 ):
     """
-    Calculate total P/L and Fees from DCA bot trades.
+    Calculate total P/L from DCA bot trades.
     Will calculate all deals unless bot ID specified with optional argument
     """
-    if size is not None and bot is None:
-        click.secho(
-            "You can not provide a dollar allocation without also providing a bot (see --help)",
-            fg="red",
-            bold=True,
-        )
-        sys.exit(1)
 
     config = Config(config_file, nolog)
     client = Client(config)
@@ -178,8 +171,9 @@ def main(
             count += int(list_bot.get("finished_deals_count"))
     else:
         count = int(bot_info.get("finished_deals_count"))
-    if count > 1000:
-        count = round(count / 1000)
+    if count > MAX_RESP:
+        count = round(count / MAX_RESP)
+
     else:
         count = 1
     deals = []
@@ -191,28 +185,26 @@ def main(
             sys.exit(1)
         deals += deal_part
         count -= 1
-        offset = offset + 1000
+        offset = offset + MAX_RESP
 
     total_pl = float(0)
-    total_fees = float(0)
-    fee = float(config.exchange_fee) / 100
     if not nolog:
         f = Path(config.outfile)
     for deal in deals:
         if not nolog:
             if deals.index(deal) == 0:
                 values = ",".join(deal.keys()) + "\n"
-        pl, fees = client.get_prices(deal, fee)
-        if pl is None and fee is None:
+        pl = client.get_prices(deal)
+        if pl is None:
+            continue
+        if deal.get("status") in config.omit_statuses:
+            del deals[deals.index(deal)]
             continue
         if not quiet and not totals_only:
             click.echo(f"Deal ID: {deal.get('id')}")
-            click.secho("-----", bold=True)
             click.echo(f"P/L: ${round(pl, 2)}")
-            click.echo(f"Fee: ${round(fees, 2)}")
             click.echo()
         total_pl += pl
-        total_fees += fees
         value_list = list(deal.values())
         if not nolog:
             for i in value_list:
