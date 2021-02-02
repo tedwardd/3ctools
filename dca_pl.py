@@ -102,9 +102,13 @@ class Client:
         except TypeError:
             bought = float(0)
 
-        real_pl = sold - bought
+        pl_val = sold - bought
+        if bought > 0 and sold > 0:
+            pl_perc = "%.2f" % (round(1 - (bought / sold), 4) * 100)
+        else:
+            pl_perc = 0
 
-        return real_pl
+        return pl_val, pl_perc
 
 
 @click.command()
@@ -188,13 +192,15 @@ def main(
         offset = offset + MAX_RESP
 
     total_pl = float(0)
+    total_perc = float(0)
     if not nolog:
         f = Path(config.outfile)
+    deal_count = len(deals)
     for deal in deals:
         if not nolog:
             if deals.index(deal) == 0:
                 values = ",".join(deal.keys()) + "\n"
-        pl = client.get_prices(deal)
+        pl, pl_perc = client.get_prices(deal)
         if pl is None:
             continue
         if deal.get("status") in config.omit_statuses:
@@ -203,7 +209,8 @@ def main(
         if not quiet and not totals_only:
             click.echo(f"Deal ID: {deal.get('id')}")
             click.echo(f"P/L: ${round(pl, 2)}")
-            click.echo()
+            click.echo(f"P/L%: {pl_perc}%\n")
+        total_perc += float(pl_perc)
         total_pl += pl
         value_list = list(deal.values())
         if not nolog:
@@ -218,7 +225,9 @@ def main(
         click.echo(f"Deals Completed: {len(deals)}")
         click.echo(f"P/L: ${round(total_pl, 2)}")
         if size is not None:
-            click.echo(f"P/L %: {round((total_pl/float(size))*100, 2)}%")
+            click.echo(f"Total P/L %: {round((total_pl/float(size))*100, 2)}%")
+        avg_pl = int(total_perc) / int(deal_count)
+        click.echo(f"Avg. P/L %: {round(avg_pl, 2)}%")
 
 
 if __name__ == "__main__":
