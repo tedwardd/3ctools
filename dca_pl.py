@@ -249,7 +249,7 @@ def main(
                 values += str(i) + ","
             values += "\n"
     avg_deal_len = str(total_deals_len.seconds / int(deal_count) / 60)
-    print(time.strftime(avg_deal_len))
+    # print(time.strftime(avg_deal_len))
     if not nolog:
         with Path(config.outfile) as f:
             f.open("w").write(values)
