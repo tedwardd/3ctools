@@ -5,6 +5,9 @@ import click
 import configparser
 import sys
 from pathlib import Path
+from datetime import datetime
+import time
+import json
 
 """
 Usage Examples:
@@ -110,6 +113,25 @@ class Client:
 
         return pl_val, pl_perc
 
+    def balances_by_exchange(self):
+        error, account_data = self.p3cw.request(
+            entity="accounts",
+            action="",
+        )
+
+        if error.get("error"):
+            click.secho(error.get("msg"), fg="red", bold=True)
+            sys.exit(1)
+
+        exchange_balances = []
+        for exchange in account_data:
+            exchange_name = exchange.get("exchange_name")
+            usd_balance = "%.2f" % float(exchange.get("usd_amount"))
+            exchange_dict = {exchange_name: usd_balance}
+            exchange_balances.append(exchange_dict)
+
+        return exchange_balances
+
 
 @click.command()
 @click.option(
@@ -193,9 +215,8 @@ def main(
 
     total_pl = float(0)
     total_perc = float(0)
-    if not nolog:
-        f = Path(config.outfile)
     deal_count = len(deals)
+    total_deals_len = None
     for deal in deals:
         if not nolog:
             if deals.index(deal) == 0:
@@ -213,12 +234,25 @@ def main(
         total_perc += float(pl_perc)
         total_pl += pl
         value_list = list(deal.values())
+        start = str(deal.get("created_at")).split(".")[0]
+        end = str(deal.get("closed_at")).split(".")[0]
+        if start is not None and end is not None:
+            start = datetime.fromisoformat(start)
+            end = datetime.fromisoformat(end)
+            deal_len = end - start
+            if total_deals_len is None:
+                total_deals_len = deal_len
+            else:
+                total_deals_len += deal_len
         if not nolog:
             for i in value_list:
                 values += str(i) + ","
             values += "\n"
+    avg_deal_len = str(total_deals_len.seconds / int(deal_count) / 60)
+    print(time.strftime(avg_deal_len))
     if not nolog:
-        f.open("w").write(values)
+        with Path(config.outfile) as f:
+            f.open("w").write(values)
     if not quiet:
         click.secho("Totals", bold=True)
         click.secho("-----", bold=True)
@@ -228,6 +262,8 @@ def main(
             click.echo(f"Total P/L %: {round((total_pl/float(size))*100, 2)}%")
         avg_pl = int(total_perc) / int(deal_count)
         click.echo(f"Avg. P/L %: {round(avg_pl, 2)}%")
+
+    balances_by_exchange = json.dumps(client.balances_by_exchange())
 
 
 if __name__ == "__main__":
