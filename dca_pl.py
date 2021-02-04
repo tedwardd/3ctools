@@ -125,7 +125,7 @@ class Client:
 
         exchange_balances = []
         for exchange in account_data:
-            exchange_name = exchange.get("pretty_display_type")
+            exchange_name = exchange.get("name")
             usd_balance = "%.2f" % float(exchange.get("usd_amount"))
             exchange_dict = {exchange_name: usd_balance}
             exchange_balances.append(exchange_dict)
